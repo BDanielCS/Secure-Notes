@@ -282,7 +282,7 @@ public class Window {
 		advanced.add(clearFind);
 
 		JMenuItem replaceAll = new JMenuItem("Replace All");
-		// action
+		// action keep working
 		advanced.add(replaceAll);
 
 		menu.add(advanced);

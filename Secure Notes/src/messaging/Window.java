@@ -35,6 +35,10 @@ import javax.swing.JTextField;
 import javax.swing.SwingConstants;
 import javax.swing.UIManager;
 import javax.swing.UnsupportedLookAndFeelException;
+import javax.swing.text.BadLocationException;
+import javax.swing.text.DefaultHighlighter;
+import javax.swing.text.Highlighter;
+import javax.swing.text.Highlighter.HighlightPainter;
 
 import Stored.Save;
 import Stored.Users;
@@ -169,19 +173,19 @@ public class Window {
 
 		// CENTER Text area
 		JPanel center = new JPanel(new GridBagLayout());
-		
+
 		gbchat.fill = GridBagConstraints.HORIZONTAL;
 		gbchat.gridwidth = GridBagConstraints.REMAINDER;
-		
+
 		JScrollPane centerScroll = new JScrollPane();
-		
+
 		display = new JTextArea(300, 40);
 		display.setFont(display.getFont().deriveFont(FONT));
 		display.setLineWrap(true);
 		center.setBackground(Color.decode("#99ebff"));
 		centerScroll.setViewportView(display);
-		centerScroll.setPreferredSize(new Dimension(1200,800));
-		
+		centerScroll.setPreferredSize(new Dimension(1200, 800));
+
 		center.add(centerScroll);
 
 		chat_window.add(center, BorderLayout.CENTER);
@@ -196,7 +200,7 @@ public class Window {
 		analysis.setToolTipText("Enabled settings display in sidebars");
 
 		JMenuItem saveChat = new JMenuItem("Save Chat");
-		saveChat.addActionListener(new ActionListener(){
+		saveChat.addActionListener(new ActionListener() {
 
 			@Override
 			public void actionPerformed(ActionEvent arg0) {
@@ -205,9 +209,9 @@ public class Window {
 				} catch (IOException e) {
 					JOptionPane.showMessageDialog(chat_window, "Save Location Corrupted");
 				}
-				
+
 			}
-			
+
 		});
 		pageMenu.add(saveChat);
 
@@ -226,6 +230,7 @@ public class Window {
 
 				if (response == JOptionPane.YES_OPTION) {
 					// save the text somewhere
+					saveChat.doClick();
 					chat_window.dispose();
 				}
 			}
@@ -236,8 +241,45 @@ public class Window {
 		menu.add(pageMenu);
 
 		JMenuItem find = new JMenuItem("Find");
-		// actionlistner here
+		find.addActionListener(new ActionListener() {
+
+			@Override
+			public void actionPerformed(ActionEvent arg0) {
+
+				String toFind = JOptionPane.showInputDialog("What word would you like to find?");
+				String allText = display.getText();
+				int pos = -1;
+
+				Highlighter highlighter = display.getHighlighter();
+				HighlightPainter painter = new DefaultHighlighter.DefaultHighlightPainter(Color.YELLOW);
+
+				if (toFind.equals("")) {
+					JOptionPane.showMessageDialog(chat_window, "Invalid Search");
+				} else {
+					try {
+						// keep working here
+						while ((pos = allText.indexOf(toFind, pos + 1)) != -1) {
+							highlighter.addHighlight(pos, pos + toFind.length(), painter);
+
+						}
+					} catch (BadLocationException e) {
+						e.printStackTrace();
+					}
+
+				}
+
+				display.revalidate();
+
+			}
+
+		});
 		advanced.add(find);
+
+		JMenuItem clearFind = new JMenuItem("Clear Selections");
+		clearFind.addActionListener(action -> {
+			display.getHighlighter().removeAllHighlights();
+		});
+		advanced.add(clearFind);
 
 		JMenuItem replaceAll = new JMenuItem("Replace All");
 		// action
@@ -258,15 +300,14 @@ public class Window {
 		// Left information panel
 		JPanel west = new JPanel(new GridBagLayout());
 		west.setBackground(BACKGROUND_COLOR);
-		
+
 		gbchat.anchor = GridBagConstraints.PAGE_START;
-		
+
 		JLabel analytics = new JLabel("Analytics");
 		analytics.setBackground(BACKGROUND_COLOR);
-		analytics.setPreferredSize(new Dimension(260,40));
+		analytics.setPreferredSize(new Dimension(260, 40));
 		analytics.setHorizontalAlignment(SwingConstants.CENTER);
-		
-		
+
 		west.add(analytics, gbchat);
 
 		chat_window.add(west, BorderLayout.WEST);
@@ -381,18 +422,19 @@ public class Window {
 					chat_window.setTitle("Hello " + username.getText());
 					username.setText("");
 					password.setText("");
-					
-					//loading up saved text from previous session if any was saved
+
+					// loading up saved text from previous session if any was
+					// saved
 					String text;
 					try {
-						if((text = notes.read(chat_window.getTitle())) != null){
+						if ((text = notes.read(chat_window.getTitle())) != null) {
 							display.setText(text);
 						}
 					} catch (IOException e) {
 						// TODO Auto-generated catch block
 						e.printStackTrace();
 					}
-					
+
 					login_window.dispose();
 
 					// ensure the window is fully loaded by other thread before

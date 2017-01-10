@@ -17,6 +17,8 @@ import java.awt.event.KeyListener;
 import java.awt.event.WindowEvent;
 import java.awt.event.WindowListener;
 import java.io.IOException;
+import java.util.HashMap;
+import java.util.Map;
 
 import javax.swing.JButton;
 import javax.swing.JCheckBoxMenuItem;
@@ -43,27 +45,88 @@ import javax.swing.text.Highlighter.HighlightPainter;
 import Stored.Save;
 import Stored.Users;
 
-/*
- * create the window for which the log in feature and the chat 
- * will be displayed
+/**
+ * create the window for which the log in feature and the secured
+ * notepad will be displayed.  The main chat window which is generated 
+ * by a separate thread will consist
+ * of a frame while the login window will be a dialog box
+ * 
+ * @author Brandon Daniel bjd
  */
 public class Window {
 
-	private JFrame chat_window;
-	private JDialog login_window;
-	private Dimension chat_dim, login_dim;
+	/**
+	 * Main window for the note-pad
+	 */
+	private JFrame chatWindow;
+	
+	/**
+	 * login screen that is displayed first.
+	 */
+	private JDialog loginWindow;
+	
+	/**
+	 * preferred dimensions of the chat and login screens 
+	 */
+	private Dimension chatDim, loginDim;
+	
+	/**
+	 * preferred height of each text box for the login screen
+	 */
 	private final int TEXT_BOX_HEIGHT_FACTOR = 2;
-	private GridBagConstraints gblogin, gbchat;
-	private Users info_nexus;
-	private final float FONT = 28f;
+	
+	/**
+	 * sets the constraints/positioning for the login and chat windows
+	 */
+	private GridBagConstraints gbLogin, gbChat;
+	
+	/**
+	 * Instance of database which will store all user information in a secure
+	 * manner. 
+	 */
+	private Users infoNexus;
+	
+	/**
+	 * current state of the user
+	 */
+	private boolean loggedIn = false;
+	
+	/**
+	 * Dedicated font size for all non-header text in the program
+	 */
+	private final float FONT = 32f;
+	
+	/**
+	 * supporting thread which builds the main notepad window
+	 */
 	private Thread chatWindowLoad;
+	
+	/**
+	 * longest username or password value that is allowed
+	 */
 	public final static int MAX_STRING_LENGTH = 25;
+	
+	/**
+	 * default major background color for the entire program
+	 */
 	private final Color BACKGROUND_COLOR = Color.decode("#5CB3FF");
+	
+	/**
+	 * instance which saves all information regarding notes taking by
+	 * each user to the notes file
+	 */
 	private Save notes;
-	private JTextArea display;
+	
+	/**
+	 * two major text areas on the noteWindow screen.  display is where any text
+	 * can be inputed while the infoArea is non-editable and will only be useds
+	 * to display analytics when prompted.
+	 */
+	private JTextArea display, infoArea;
 
-	/*
-	 * initialize some starting values for the frame
+	/**
+	 * Instance of this class generates the gui for the secure notes window
+	 * which also includes the log in screen.
 	 */
 	public Window() {
 
@@ -77,26 +140,27 @@ public class Window {
 			e.printStackTrace();
 		}
 
-		chat_window = new JFrame();
-		chat_window.setVisible(false);
+		chatWindow = new JFrame();
+		chatWindow.setVisible(false);
 
-		login_window = new JDialog(null, "Login", Dialog.ModalityType.APPLICATION_MODAL);
+		loginWindow = new JDialog(null, "Login", Dialog.ModalityType.APPLICATION_MODAL);
 
-		chat_dim = new Dimension(1920, 1080);
-		login_dim = new Dimension(940, 540);
-		gblogin = new GridBagConstraints();
-		gbchat = new GridBagConstraints();
-		info_nexus = new Users();
+		chatDim = new Dimension(1920, 1080);
+		loginDim = new Dimension(940, 540);
+		gbLogin = new GridBagConstraints();
+		gbChat = new GridBagConstraints();
+		infoNexus = new Users();
 		notes = new Save();
+		infoArea = new JTextArea(80, 20);
 
 		// load up main window in parallel
-		Runnable load_chat = () -> {
-			init_chat_app();
+		Runnable loadChat = () -> {
+			initChatApp();
 		};
-		chatWindowLoad = new Thread(load_chat);
+		chatWindowLoad = new Thread(loadChat);
 		chatWindowLoad.start();
 
-		init_login();
+		initLogin();
 
 		// Ensure thread joins in case no successful logins
 		try {
@@ -105,20 +169,19 @@ public class Window {
 			// TODO Auto-generated catch block
 			e.printStackTrace();
 		}
-
 	}
 
-	/*
-	 * set up the application front end itself including the text windows with
-	 * menu bar and active members
+	/**
+	 * Initialize the chat window including the menu bars, displays for input and output
+	 * and any action listeners associated with each interactable item.
 	 */
-	private void init_chat_app() {
+	private void initChatApp() {
 
 		// chat application window initialization
-		chat_window.setDefaultCloseOperation(JFrame.DO_NOTHING_ON_CLOSE);
+		chatWindow.setDefaultCloseOperation(JFrame.DO_NOTHING_ON_CLOSE);
 
-		// saving state of info_nexus on closure
-		chat_window.addWindowListener(new WindowListener() {
+		// saving state of infoNexus on closure
+		chatWindow.addWindowListener(new WindowListener() {
 
 			@Override
 			public void windowActivated(WindowEvent arg0) {
@@ -134,8 +197,13 @@ public class Window {
 
 			@Override
 			public void windowClosing(WindowEvent arg0) {
-				info_nexus.close();
-				chat_window.dispose();
+				infoNexus.close();
+				try {
+					notes.write(chatWindow.getName(), display.getText());
+				} catch (IOException e) {
+					JOptionPane.showMessageDialog(chatWindow, "Unsuccessful Save");
+				}
+				chatWindow.dispose();
 
 			}
 
@@ -165,17 +233,40 @@ public class Window {
 
 		});
 
-		chat_window.setPreferredSize(chat_dim);
-		chat_window.setMinimumSize(chat_dim);
-		chat_window.setLocationRelativeTo(null);
-		chat_window.getContentPane().setBackground(BACKGROUND_COLOR);
-		chat_window.setLayout(new BorderLayout());
+		chatWindow.setPreferredSize(chatDim);
+		chatWindow.setMinimumSize(chatDim);
+		chatWindow.setLocationRelativeTo(null);
+		chatWindow.getContentPane().setBackground(BACKGROUND_COLOR);
+		chatWindow.setLayout(new BorderLayout());
+
+		// Left information panel
+		JPanel west = new JPanel(new GridBagLayout());
+		west.setBackground(BACKGROUND_COLOR);
+		west.setPreferredSize(new Dimension(560, 900));
+		infoArea.setBackground(BACKGROUND_COLOR);
+		infoArea.setEditable(false);
+		infoArea.setPreferredSize(new Dimension(260, 60));
+		infoArea.setFont(infoArea.getFont().deriveFont(FONT));
+
+		JScrollPane infoScroller = new JScrollPane(infoArea);
+		infoScroller.setPreferredSize(new Dimension(520, 800));
+
+		gbChat.anchor = GridBagConstraints.PAGE_START;
+		gbChat.fill = GridBagConstraints.HORIZONTAL;
+		gbChat.gridwidth = GridBagConstraints.REMAINDER;
+
+		JLabel analytics = new JLabel("Analytics");
+		analytics.setFont(analytics.getFont().deriveFont(42f));
+		analytics.setBackground(BACKGROUND_COLOR);
+		analytics.setPreferredSize(new Dimension(260, 80));
+		analytics.setHorizontalAlignment(SwingConstants.CENTER);
+
+		west.add(analytics, gbChat);
+		gbChat.gridy = 1;
+		west.add(infoScroller, gbChat);
 
 		// CENTER Text area
 		JPanel center = new JPanel(new GridBagLayout());
-
-		gbchat.fill = GridBagConstraints.HORIZONTAL;
-		gbchat.gridwidth = GridBagConstraints.REMAINDER;
 
 		JScrollPane centerScroll = new JScrollPane();
 
@@ -188,7 +279,7 @@ public class Window {
 
 		center.add(centerScroll);
 
-		chat_window.add(center, BorderLayout.CENTER);
+		chatWindow.add(center, BorderLayout.CENTER);
 
 		// BEGIN MENU BAR
 		JMenuBar menu = new JMenuBar();
@@ -205,9 +296,9 @@ public class Window {
 			@Override
 			public void actionPerformed(ActionEvent arg0) {
 				try {
-					notes.write(chat_window.getTitle(), display.getText());
+					notes.write(chatWindow.getName(), display.getText());
 				} catch (IOException e) {
-					JOptionPane.showMessageDialog(chat_window, "Save Location Corrupted");
+					JOptionPane.showMessageDialog(chatWindow, "Save Location Corrupted");
 				}
 
 			}
@@ -226,12 +317,12 @@ public class Window {
 
 			@Override
 			public void actionPerformed(ActionEvent arg0) {
-				int response = JOptionPane.showConfirmDialog(chat_window, "Are you sure you want to quit?");
+				int response = JOptionPane.showConfirmDialog(chatWindow, "Are you sure you want to quit?");
 
 				if (response == JOptionPane.YES_OPTION) {
 					// save the text somewhere
 					saveChat.doClick();
-					chat_window.dispose();
+					chatWindow.dispose();
 				}
 			}
 
@@ -254,7 +345,7 @@ public class Window {
 				HighlightPainter painter = new DefaultHighlighter.DefaultHighlightPainter(Color.YELLOW);
 
 				if (toFind.equals("")) {
-					JOptionPane.showMessageDialog(chat_window, "Invalid Search");
+					JOptionPane.showMessageDialog(chatWindow, "Invalid Search");
 				} else {
 					try {
 						// keep working here
@@ -282,65 +373,200 @@ public class Window {
 		advanced.add(clearFind);
 
 		JMenuItem replaceAll = new JMenuItem("Replace All");
-		// action keep working now
+		replaceAll.addActionListener(new ActionListener() {
+
+			@Override
+			public void actionPerformed(ActionEvent arg0) {
+				String input = display.getText();
+				String toReplace = JOptionPane.showInputDialog("Type the word to replace");
+				String replaceWith = JOptionPane.showInputDialog("Type the word to replace \"" + toReplace + "\" with");
+
+				display.setText(input.replaceAll(toReplace, replaceWith));
+
+			}
+
+		});
 		advanced.add(replaceAll);
 
 		menu.add(advanced);
 
-		JCheckBoxMenuItem wordLetterFreq = new JCheckBoxMenuItem("Word/Letter Histogram");
-		// act
+		JCheckBoxMenuItem wordLetterFreq = new JCheckBoxMenuItem("Word/Letter Analytics");
+		wordLetterFreq.addActionListener(new ActionListener() {
+
+			@Override
+			public void actionPerformed(ActionEvent arg0) {
+
+				infoArea.setText("");
+
+				if (wordLetterFreq.isSelected()) {
+					Map<Character, Integer> hist = new HashMap<>();
+					String text = display.getText();
+					StringBuffer stats = new StringBuffer();
+
+					// get info about occurrences of chars
+					for (int i = 0; i < text.length(); i++) {
+						char curr = text.charAt(i);
+						if (!(curr == '\n' || curr == ' ')) {
+							if (!hist.containsKey(curr)) {
+								hist.put(curr, 1);
+							} else {
+								hist.put(curr, hist.get(curr) + 1);
+							}
+						}
+
+					}
+
+					// convert all info to string
+					stats.append("Character -- Appearances\n");
+					for (Character c : hist.keySet()) {
+						stats.append(c + " -- " + hist.get(c) + "\n");
+					}
+
+					infoArea.setText(stats.toString());
+				} else {
+					// clears the panel
+					infoArea.setText("");
+				}
+			}
+
+		});
 		analysis.add(wordLetterFreq);
 
-		JCheckBoxMenuItem topWords = new JCheckBoxMenuItem("Word Pairs/Triplets");
-		// act
+		JCheckBoxMenuItem topWords = new JCheckBoxMenuItem("Word Pairs");
+		topWords.addActionListener(new ActionListener() {
+
+			@Override
+			public void actionPerformed(ActionEvent arg0) {
+
+				if (topWords.isSelected()) {
+					infoArea.setText("");
+					String[] text = display.getText().replaceAll("\\n", "").split(" ");
+					String curr;
+					Map<String, Integer> hist = new HashMap<String, Integer>();
+					StringBuffer output = new StringBuffer();
+
+					// remove any punctuation and add to space
+					for (int indx = 0; indx < text.length; indx++) {
+						curr = text[indx];
+						for (int i = 0; i < text[indx].length(); i++) {
+							if (!Character.isAlphabetic(curr.charAt(i)) && !Character.isDigit(curr.charAt(i))) {
+								// remove this character because it is
+								// punctuation or invalid symbol
+								text[indx] = curr.replaceAll(Character.toString(curr.charAt(i)), "");
+							}
+						}
+					}
+
+					// determine occurrences of pairs
+					for (int prev = 0, current = 1; current < text.length; prev++, current++) {
+						String entry = text[prev] + " " + text[current];
+						if (hist.containsKey(entry)) {
+							hist.put(entry, hist.get(entry) + 1);
+						} else {
+							hist.put(text[prev] + " " + text[current], 1);
+						}
+
+					}
+
+					// format output for display and display
+					output.append("Pair -- Appearances\n");
+
+					for (String pair : hist.keySet()) {
+						output.append(pair + " -- " + hist.get(pair) + "\n");
+					}
+
+					infoArea.setText(output.toString());
+
+				} else {
+					infoArea.setText("");
+				}
+
+			}
+		});
 		analysis.add(topWords);
 
 		menu.add(analysis);
 
-		// Left information panel
-		JPanel west = new JPanel(new GridBagLayout());
-		west.setBackground(BACKGROUND_COLOR);
-
-		gbchat.anchor = GridBagConstraints.PAGE_START;
-
-		JLabel analytics = new JLabel("Analytics");
-		analytics.setBackground(BACKGROUND_COLOR);
-		analytics.setPreferredSize(new Dimension(260, 40));
-		analytics.setHorizontalAlignment(SwingConstants.CENTER);
-
-		west.add(analytics, gbchat);
-
-		chat_window.add(west, BorderLayout.WEST);
-		chat_window.setJMenuBar(menu);
-		chat_window.pack();
+		chatWindow.add(west, BorderLayout.WEST);
+		chatWindow.setJMenuBar(menu);
+		chatWindow.pack();
 
 	}
 
 	/*
 	 * prompt the login window before bring the user to the application screen
 	 */
-	private void init_login() {
+	private void initLogin() {
 
 		// set up the the basic frame
-		login_window.setDefaultCloseOperation(JFrame.DISPOSE_ON_CLOSE);
-		login_window.setMinimumSize(login_dim);
-		login_window.setPreferredSize(login_dim);
-		login_window.setLocationRelativeTo(chat_window);
-		login_window.setBackground(BACKGROUND_COLOR);
+		loginWindow.setDefaultCloseOperation(JFrame.DO_NOTHING_ON_CLOSE);
+		loginWindow.setMinimumSize(loginDim);
+		loginWindow.setPreferredSize(loginDim);
+		loginWindow.setLocationRelativeTo(chatWindow);
+		loginWindow.setBackground(BACKGROUND_COLOR);
+		
+		loginWindow.addWindowListener(new WindowListener(){
+
+			@Override
+			public void windowActivated(WindowEvent e) {
+				// TODO Auto-generated method stub
+				
+			}
+
+			@Override
+			public void windowClosed(WindowEvent e) {
+				if(!loggedIn){
+					System.exit(0);
+				}
+				
+			}
+
+			@Override
+			public void windowClosing(WindowEvent e) {
+				loginWindow.dispose();
+				
+			}
+
+			@Override
+			public void windowDeactivated(WindowEvent e) {
+				// TODO Auto-generated method stub
+				
+			}
+
+			@Override
+			public void windowDeiconified(WindowEvent e) {
+				// TODO Auto-generated method stub
+				
+			}
+
+			@Override
+			public void windowIconified(WindowEvent e) {
+				// TODO Auto-generated method stub
+				
+			}
+
+			@Override
+			public void windowOpened(WindowEvent e) {
+				// TODO Auto-generated method stub
+				
+			}
+			
+		});
+		
 
 		// creating area for username and password
 		JPanel panel = new JPanel();
-		panel.setBackground(login_window.getBackground());
+		panel.setBackground(loginWindow.getBackground());
 		panel.setLayout(new GridBagLayout());
-		gblogin.insets = new Insets(5, 15, 5, 15);
+		gbLogin.insets = new Insets(5, 15, 5, 15);
 
 		// Titles for the fields
 		JLabel username_title = new JLabel("Username");
 		JLabel password_title = new JLabel("Password");
 		username_title.setHorizontalAlignment(JLabel.CENTER);
-		username_title.setFont(username_title.getFont().deriveFont(28f));
+		username_title.setFont(username_title.getFont().deriveFont(FONT));
 		password_title.setHorizontalAlignment(JLabel.CENTER);
-		password_title.setFont(password_title.getFont().deriveFont(28f));
+		password_title.setFont(password_title.getFont().deriveFont(FONT));
 
 		// Username and password Fields
 		JTextField username = new JTextField(MAX_STRING_LENGTH);
@@ -357,8 +583,8 @@ public class Window {
 		password.setFont(password.getFont().deriveFont(FONT));
 
 		// Log in button
-		JButton sign_in = new JButton("Log In");
-		sign_in.setFont(sign_in.getFont().deriveFont(FONT));
+		JButton signIn = new JButton("Log In");
+		signIn.setFont(signIn.getFont().deriveFont(FONT));
 
 		JButton create_account = new JButton("New Account");
 		create_account.setFont(create_account.getFont().deriveFont(FONT));
@@ -393,7 +619,7 @@ public class Window {
 			@Override
 			public void keyPressed(KeyEvent e) {
 				if (e.getKeyCode() == KeyEvent.VK_ENTER) {
-					sign_in.doClick();
+					signIn.doClick();
 				}
 
 			}
@@ -413,13 +639,15 @@ public class Window {
 		});
 
 		// attempt to log in
-		sign_in.addActionListener(new ActionListener() {
+		signIn.addActionListener(new ActionListener() {
 
 			@Override
 			public void actionPerformed(ActionEvent action) {
-				if (info_nexus.user_pass_valid(username.getText(), new String(password.getPassword()))) {
+				if (infoNexus.userPassValid(username.getText(), new String(password.getPassword()))) {
 					// go to the chatwindow and load previous text
-					chat_window.setTitle("Hello " + username.getText());
+					loggedIn = true;
+					chatWindow.setTitle("Hello " + username.getText());
+					chatWindow.setName(username.getText());
 					username.setText("");
 					password.setText("");
 
@@ -427,7 +655,7 @@ public class Window {
 					// saved
 					String text;
 					try {
-						if ((text = notes.read(chat_window.getTitle())) != null) {
+						if ((text = notes.read(chatWindow.getName())) != null) {
 							display.setText(text);
 						}
 					} catch (IOException e) {
@@ -435,23 +663,23 @@ public class Window {
 						e.printStackTrace();
 					}
 
-					login_window.dispose();
+					loginWindow.dispose();
 
 					// ensure the window is fully loaded by other thread before
 					// allowing visibility
 					try {
 						chatWindowLoad.join();
-						chat_window.setVisible(true);
+						chatWindow.setVisible(true);
 					} catch (InterruptedException e) {
 						// TODO Auto-generated catch block
 						e.printStackTrace();
 					}
-				} else if (info_nexus.has_account(username.getText())) {
+				} else if (infoNexus.hasAccount(username.getText())) {
 					// test if username is at least in the database
-					JOptionPane.showMessageDialog(chat_window, "Incorrect Password");
+					JOptionPane.showMessageDialog(chatWindow, "Incorrect Password");
 					password.setText("");
 				} else {
-					JOptionPane.showMessageDialog(chat_window, " No Username " + username.getText()
+					JOptionPane.showMessageDialog(chatWindow, " No Username " + username.getText()
 							+ " exists in system\n" + "To make an account. Click \" New Account\"");
 				}
 
@@ -466,45 +694,45 @@ public class Window {
 				String username = JOptionPane.showInputDialog("Please type your desired username.");
 				String pass = JOptionPane.showInputDialog("Please type desired password.");
 
-				if (info_nexus.add_user(username, pass)) {
-					JOptionPane.showMessageDialog(login_window, "Account Creation Successful!");
+				if (infoNexus.addUser(username, pass)) {
+					JOptionPane.showMessageDialog(loginWindow, "Account Creation Successful!");
 				} else {
-					JOptionPane.showMessageDialog(login_window, "Username " + username + " already in use. Try Again.");
+					JOptionPane.showMessageDialog(loginWindow, "Username " + username + " already in use. Try Again.");
 				}
 			}
 
 		});
 
 		// setting constraints for positioning for each component
-		gblogin.anchor = GridBagConstraints.PAGE_START;
-		panel.add(username_title, gblogin);
+		gbLogin.anchor = GridBagConstraints.PAGE_START;
+		panel.add(username_title, gbLogin);
 
-		gblogin.gridy = 1;
-		panel.add(username, gblogin);
+		gbLogin.gridy = 1;
+		panel.add(username, gbLogin);
 
-		gblogin.gridy = 2;
-		panel.add(password_title, gblogin);
+		gbLogin.gridy = 2;
+		panel.add(password_title, gbLogin);
 
-		gblogin.gridy = 3;
-		panel.add(password, gblogin);
+		gbLogin.gridy = 3;
+		panel.add(password, gbLogin);
 
 		// sub panel for log in and create account buttons
 		JPanel button_pane = new JPanel(new GridBagLayout());
 		GridBagConstraints button_constraints = new GridBagConstraints();
 
-		button_pane.setBackground(login_window.getBackground());
-		button_pane.add(sign_in, button_constraints);
+		button_pane.setBackground(loginWindow.getBackground());
+		button_pane.add(signIn, button_constraints);
 
 		button_constraints.gridx = 1;
-		button_pane.add(create_account, gblogin);
+		button_pane.add(create_account, gbLogin);
 
 		// add pane to main pane
-		gblogin.gridy = 4;
-		panel.add(button_pane, gblogin);
+		gbLogin.gridy = 4;
+		panel.add(button_pane, gbLogin);
 
-		login_window.add(panel, BorderLayout.CENTER);
-		login_window.pack();
-		login_window.setVisible(true);
+		loginWindow.add(panel, BorderLayout.CENTER);
+		loginWindow.pack();
+		loginWindow.setVisible(true);
 	}
 
 }

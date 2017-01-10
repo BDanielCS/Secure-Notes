@@ -15,46 +15,68 @@ import java.util.HashMap;
 
 import javax.swing.JOptionPane;
 
-/*
+/**
  * store the information about the users in a safe manner using
- * the encryption cipher.
+ * the encryption cipher. which the key as the defined code in Encrypt and 
+ * the value as the nested class to hold the user/pass information securely in
+ * array format
  */
 public class Users implements Serializable {
 
+	/**
+	 * Serialization version
+	 */
 	private static final long serialVersionUID = -8814926360755146022L;
 
+	/**
+	 * holds user pass information after they have been converted
+	 * securely by the cipher
+	 */
 	private HashMap<BigInteger, UserCipheredInfo> pairs;
 
-	/*
+	/**
 	 * Contains the post transformed information regarding the username and
 	 * password of the user
 	 */
 	protected class UserCipheredInfo implements Serializable {
 
+		/**
+		 * Serialization version
+		 */
 		private static final long serialVersionUID = 2220296435821310205L;
 
+		/**
+		 * holds the post ciphered username and passwords
+		 */
 		private int[] username, password;
 
+		/**
+		 * actions as a container to hold the ciphered usernames and
+		 * password
+		 * @param user
+		 * @param pass
+		 */
 		protected UserCipheredInfo(String user, String pass) {
 			username = Encrypt.cipher(user);
 			password = Encrypt.cipher(pass);
 		}
 	}
 
-	/*
-	 * create the underlying database to addition of users
+	/**
+	 * create the underlying database. Load up previous accounts from the 
+	 * serialization.  
 	 */
 	public Users() {
 		pairs = null;
 		open();
 	}
 
-	/*
+	/**
 	 * given the username and password. Convert to encrypted value and ensure
 	 * the correct log in information in within the system.
 	 */
-	public boolean user_pass_valid(String user, String pass) {
-		UserCipheredInfo key = pairs.get(Encrypt.user_code(user));
+	public boolean userPassValid(String user, String pass) {
+		UserCipheredInfo key = pairs.get(Encrypt.userCode(user));
 
 		if (key != null) {
 			// check valid password
@@ -65,40 +87,46 @@ public class Users implements Serializable {
 		return false;
 	}
 
-	/*
+	/**
 	 * ensures that the username is within the map
 	 */
-	public boolean has_account(String user) {
-		return pairs.containsKey(Encrypt.user_code(user));
+	public boolean hasAccount(String user) {
+		return pairs.containsKey(Encrypt.userCode(user));
 	}
 
-	/*
+	/***
 	 * Adds the person to the database. if there is already an account. No
 	 * additions/changes are made
 	 */
-	public boolean add_user(String user, String pass) {
-		if (!pairs.containsKey(Encrypt.user_code(user))) {
-			pairs.put(Encrypt.user_code(user), new UserCipheredInfo(user, pass));
+	public boolean addUser(String user, String pass) {
+		
+		//maintain the 25 charcter maximum
+		if(user.length() >= 25 || pass.length() >= 25){
+			return false;
+		}
+		
+		if (!pairs.containsKey(Encrypt.userCode(user))) {
+			pairs.put(Encrypt.userCode(user), new UserCipheredInfo(user, pass));
 			return true;
 		}
 		return false;
 
 	}
 
-	/*
+	/**
 	 * Assuming the user is already in the system, remove the user from the
 	 * database safely
 	 */
-	public boolean remove_user(String user, String pass) {
-		if (pairs.containsKey(Encrypt.user_code(user))) {
+	public boolean removeUser(String user, String pass) {
+		if (pairs.containsKey(Encrypt.userCode(user))) {
 			pairs.remove(Encrypt.cipher(user));
 			return true;
 		}
 		return false;
 	}
 
-	/*
-	 * load up the saved hashmap from the last save by deserialization
+	/**
+	 * load up the saved hashmap from the last serialization
 	 */
 	@SuppressWarnings("unchecked")
 	private void open() {
@@ -117,7 +145,7 @@ public class Users implements Serializable {
 		}
 	}
 
-	/*
+	/**
 	 * On close, serialize the pairs map in order to save its current state for
 	 * easy load up on re-opening
 	 */
@@ -133,5 +161,4 @@ public class Users implements Serializable {
 			JOptionPane.showMessageDialog(null, "File Location Not Found");
 		}
 	}
-
 }
